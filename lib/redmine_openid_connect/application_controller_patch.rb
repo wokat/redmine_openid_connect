@@ -1,7 +1,7 @@
 module RedmineOpenidConnect
   module ApplicationControllerPatch
     def require_login
-      return super unless OicSession.enabled?
+      return super unless (OicSession.enabled? && !OicSession.login_selector?)
 
       if !User.current.logged?
         if request.get?
@@ -13,6 +13,7 @@ module RedmineOpenidConnect
         redirect_to oic_login_url
         return false
       end
+      true
     end
 
     # set the current user _without_ resetting the session first

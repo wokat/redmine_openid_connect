@@ -28,6 +28,18 @@ class OicSession < ActiveRecord::Base
     !self.enabled?
   end
 
+  def self.login_selector?
+    client_config['login_selector']
+  end
+
+  def self.create_user_if_not_exists?
+    client_config['create_user_if_not_exists']
+  end
+
+  def self.disallowed_auth_sources_login
+    client_config['disallowed_auth_sources_login'].to_a
+  end
+
   def self.openid_configuration_url
     client_config['openid_connect_server_url'] + '/.well-known/openid-configuration'
   end
@@ -134,13 +146,13 @@ class OicSession < ActiveRecord::Base
 
     return true if check_keycloak_role client_config['group']
 
-    return false if !user["member_of"]
+    return false if !user["member_of"] && !user["roles"]
 
     return true if self.admin?
 
-    if client_config['group'].present? &&
-       user["member_of"].include?(client_config['group'])
-      return true
+    if client_config['group'].present?
+       return true if user["member_of"].present? && user["member_of"].include?(client_config['group'])
+       return true if user["roles"].present? && user["roles"].include?(client_config['group']) || user["roles"].include?(client_config['admin_group']) 
     end
 
     return false
@@ -151,6 +163,9 @@ class OicSession < ActiveRecord::Base
       if user["member_of"].present?
         return true if user["member_of"].include?(client_config['admin_group'])
       end
+      if user["roles"].present? 
+        return true if user["roles"].include?(client_config['admin_group'])
+      end
       # keycloak way...
       return true if check_keycloak_role client_config['admin_group']
     end
@@ -159,10 +174,10 @@ class OicSession < ActiveRecord::Base
   end
 
   def user
-    if id_token?
-      @user = JSON::parse(Base64::decode64(id_token.split('.')[1]))
-    else  # keycloak way...
+    if access_token? # keycloak way...
       @user = JSON::parse(Base64::decode64(access_token.split('.')[1]))
+    else
+      @user = JSON::parse(Base64::decode64(id_token.split('.')[1]))
     end
     return @user
   end
